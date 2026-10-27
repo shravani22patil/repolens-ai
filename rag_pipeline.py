@@ -199,11 +199,15 @@ def retrieve(question, top_k=4):
 
 
 def answer_question(question, top_k=4):
+    """Answer a question using retrieved repository evidence."""
     results = retrieve(question, top_k=top_k)
 
     if not results:
         return {
-            "answer": "No relevant repository evidence was found. Try rephrasing your question.",
+            "answer": (
+                "No relevant repository evidence was found. "
+                "Try rephrasing your question."
+            ),
             "sources": [],
         }
 
@@ -220,7 +224,6 @@ def answer_question(question, top_k=4):
         if source not in sources:
             sources.append(source)
 
-    # Prioritize implementation files over tests and documentation
     sources.sort(
         key=lambda source: (
             source.startswith("tests/") or source.startswith("test_"),
@@ -247,18 +250,17 @@ Question: {question}
 Answer:
 """
 
-client = get_gemini_client()
+    client = get_gemini_client()
 
-response = client.models.generate_content(
-    model=GENERATION_MODEL,
-    contents=prompt,
-)
+    response = client.models.generate_content(
+        model=GENERATION_MODEL,
+        contents=prompt,
+    )
 
-return {
-    "answer": response.text or "No answer was generated.",
-    "sources": sources,
-}
-
+    return {
+        "answer": response.text or "No answer was generated.",
+        "sources": sources,
+    }
 
 if __name__ == "__main__":
     if not os.getenv("GEMINI_API_KEY"):
