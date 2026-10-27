@@ -254,10 +254,10 @@ response = client.models.generate_content(
     contents=prompt,
 )
 
-    return {
-        "answer": response.text or "No answer was generated.",
-        "sources": sources,
-    }
+return {
+    "answer": response.text or "No answer was generated.",
+    "sources": sources,
+}
 
 
 if __name__ == "__main__":
