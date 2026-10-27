@@ -103,7 +103,25 @@ def embed_texts(texts):
 
         embeddings.append(response.embeddings[0].values)
 
+    return embeddings```python
+def embed_texts(texts):
+    """Create Gemini embeddings in small batches."""
+    client = get_gemini_client()
+    embeddings = []
+
+    for text in texts:
+        response = client.models.embed_content(
+            model=EMBEDDING_MODEL,
+            contents=text,
+        )
+
+        if not response.embeddings:
+            raise RuntimeError("Gemini returned no embedding.")
+
+        embeddings.append(response.embeddings[0].values)
+
     return embeddings
+
 
 
 def index_repository():
