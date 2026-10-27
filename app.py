@@ -442,7 +442,7 @@ if prompt:
 
                result = answer_question(prompt)
 
-                final_text = rag_result["answer"]
+               final_text = rag_result["answer"]
 
                  # Display the answer first
                 placeholder.markdown(final_text)
