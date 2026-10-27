@@ -23,7 +23,15 @@ EXCLUDED_DIRS = {
     ".pytest_cache", "node_modules", "build",
 }
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+def get_gemini_client():
+    api_key = os.getenv("GEMINI_API_KEY")
+
+    if not api_key:
+        raise ValueError(
+            "Gemini API key is missing. Enter your key in the Streamlit sidebar."
+        )
+
+    return genai.Client(api_key=api_key)
 chroma_client = chromadb.PersistentClient(path=str(CHROMA_DIR))
 
 collection = chroma_client.get_or_create_collection(
@@ -80,11 +88,12 @@ def chunk_text(text, chunk_size=1800, overlap=250):
 
 
 def embed_texts(texts):
+    client = get_gemini_client()
     """Create Gemini embeddings in small batches."""
     embeddings = []
 
     for text in texts:
-        response = client.models.embed_content(
+        response = client.models.generate_content(
             model=EMBEDDING_MODEL,
             contents=text,
         )
