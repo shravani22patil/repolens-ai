@@ -420,41 +420,49 @@ if prompt:
         st.stop()
 
     # Strip emoji prefix from quick query buttons
-    clean_prompt = prompt.split(" ", 1)[-1] if prompt[0] in "🔥🐛🚀📈👥🔍" else prompt
+    clean_prompt = (
+        prompt.split(" ", 1)[-1]
+        if prompt[0] in "🔥🐛🚀📈👥🔍"
+        else prompt
+    )
 
     # Display user message
-    st.session_state.messages.append({"role": "user", "content": clean_prompt})
+    st.session_state.messages.append({
+        "role": "user",
+        "content": clean_prompt,
+    })
+
     with st.chat_message("user"):
         st.markdown(clean_prompt)
 
-    # Run agent
-    # Run selected assistant
+    # Run the selected assistant
     with st.chat_message("assistant"):
         placeholder = st.empty()
         start_time = time.time()
         tools_used = []
 
         try:
-          if assistant_mode == "Repository RAG":
-            if collection.count() == 0:
-              with st.spinner("Indexing repository files..."):
-               index_repository()
+            if assistant_mode == "Repository RAG":
 
-               result = answer_question(prompt)
+                # Index the repository if no documents have been indexed
+                if collection.count() == 0:
+                    with st.spinner("Indexing repository files..."):
+                        index_repository()
 
-               final_text = rag_result["answer"]
+                # Answer using repository evidence
+                with st.spinner("Searching repository..."):
+                    rag_result = answer_question(clean_prompt)
 
-                 # Display the answer first
+                final_text = rag_result["answer"]
                 placeholder.markdown(final_text)
 
-                  # Display sources separately
-                if rag_result["sources"]:
+                # Display source files
+                if rag_result.get("sources"):
                     with st.expander("📚 Sources used", expanded=True):
                         for source in dict.fromkeys(rag_result["sources"]):
                             st.markdown(f"- `{source}`")
 
                 elapsed = time.time() - start_time
-                placeholder.markdown(final_text)
 
                 st.markdown(
                     f'<div class="response-meta">⏱ {elapsed:.1f}s · '
@@ -463,6 +471,7 @@ if prompt:
                 )
 
             else:
+                # GitHub Agent mode
                 full_response = {"text": ""}
 
                 def streaming_callback(chunk):
@@ -478,17 +487,20 @@ if prompt:
                         gemini_api_key,
                         streaming_callback,
                     )
+
                     result = agent.run(
                         [ChatMessage.from_user(clean_prompt)]
                     )
 
                 elapsed = time.time() - start_time
 
+                # Recover a response if streaming returned nothing
                 if not full_response["text"]:
                     for msg in reversed(result.get("messages", [])):
                         if hasattr(msg, "text") and msg.text:
                             full_response["text"] = msg.text
                             break
+
                         if hasattr(msg, "content") and msg.content:
                             full_response["text"] = str(msg.content)
                             break
@@ -497,20 +509,25 @@ if prompt:
                     full_response["text"]
                     or "_No response received. Try rephrasing your query._"
                 )
+
                 placeholder.markdown(final_text)
 
+                # Collect tool names
                 for msg in result.get("messages", []):
                     if hasattr(msg, "tool_calls") and msg.tool_calls:
                         for tc in msg.tool_calls:
                             name = getattr(tc, "tool_name", None)
+
                             if name and name not in tools_used:
                                 tools_used.append(name)
 
+                # Display tool badges
                 if tools_used:
                     badges = "".join(
                         f'<span class="tool-badge">⚙ {tool}</span>'
                         for tool in tools_used
                     )
+
                     st.markdown(
                         f'<div class="tool-badges">{badges}</div>',
                         unsafe_allow_html=True,
@@ -522,6 +539,7 @@ if prompt:
                     unsafe_allow_html=True,
                 )
 
+            # Update session statistics and conversation history
             st.session_state.total_queries += 1
             st.session_state.total_tools_used += len(tools_used)
 
@@ -535,12 +553,8 @@ if prompt:
         except Exception as exc:
             error_msg = f"**Error:** {exc}"
             placeholder.error(error_msg)
+
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": error_msg,
             })
-
-        except Exception as exc:
-            error_msg = f"**Error:** {exc}"
-            placeholder.markdown(error_msg)
-            st.session_state.messages.append({"role": "assistant", "content": error_msg})
