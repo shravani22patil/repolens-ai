@@ -1,87 +1,180 @@
-# GitHub Intelligence Agent
+# RepoLens AI
 
-A natural-language AI agent for researching GitHub repositories using Google Gemini, Haystack, and GitHub's MCP server.
+### GitHub Intelligence Agent + Repository RAG
 
-## Overview
+RepoLens AI is a Python application that lets users investigate GitHub
+repositories through natural-language questions. It combines a
+**Haystack agent connected to GitHub's Model Context Protocol (MCP)
+server** with a **local Retrieval-Augmented Generation (RAG) pipeline**
+for asking questions about the project's own source code and
+documentation.
 
-GitHub Intelligence Agent lets users explore GitHub repositories through conversational queries instead of manually navigating repository pages and API documentation.
+The Streamlit interface offers two modes:
 
-The agent discovers relevant GitHub tools, retrieves available repository information, and uses an LLM to generate structured responses. It is designed to distinguish repository metadata from README documentation and handle missing information without presenting unsupported details as facts.
+-   **GitHub Agent** --- uses Gemini, Haystack, and GitHub MCP tools to
+    research GitHub repositories. Provide a repository name or URL when
+    the question requires a specific remote repository.
+-   **Repository RAG** --- searches indexed files in the local RepoLens
+    AI project and generates answers from retrieved evidence, with
+    source filenames shown in the interface.
+
+> **Scope note:** GitHub Agent researches information available through
+> the configured GitHub MCP tools. Repository RAG searches the local
+> files indexed by this project; it is not automatically a
+> general-purpose index of every remote GitHub repository.
+
+------------------------------------------------------------------------
 
 ## Features
 
-- **Natural-language GitHub research:** Ask questions about repositories using plain English.
-- **Dynamic tool discovery:** Uses Haystack's `SearchableToolset` to discover relevant tools from the GitHub MCP tool catalog.
-- **Repository metadata retrieval:** Query available repository details such as stars, description, programming language, and last-updated timestamp.
-- **Repository comparison:** Compare repositories using retrieved metadata and documentation.
-- **Evidence-aware responses:** Separates GitHub metadata from information described in README files.
-- **Missing-data handling:** Uses `Not retrieved` when requested information is unavailable from the retrieved results.
-- **Careful search-result handling:** Distinguishes zero search matches from definitive proof that a repository does not exist.
-- **Interactive chat interface:** Uses Streamlit for a conversational interface.
-- **Automated tests:** Includes tests for configuration, agent construction, schema sanitization, and response-quality instructions.
+### GitHub Agent
 
-> Feature availability depends on the tools exposed by the GitHub MCP server and the behavior of the configured model. Not every possible GitHub operation has necessarily been tested.
+-   Ask natural-language questions about GitHub repositories.
+-   Discover relevant tools through Haystack's `SearchableToolset`.
+-   Retrieve available repository metadata and documentation through
+    GitHub MCP.
+-   Compare repositories using information returned by the available
+    tools.
+-   Apply response instructions for unavailable fields and zero-result
+    searches.
+-   Display responses in an interactive Streamlit chat interface.
+
+### Repository RAG
+
+-   Read supported local source-code and documentation files.
+-   Split documents into overlapping text chunks.
+-   Generate vector embeddings using Google's Gemini embedding model.
+-   Store embeddings and source metadata in persistent ChromaDB storage.
+-   Retrieve semantically relevant chunks for a question.
+-   Generate an answer using Gemini and retrieved repository evidence.
+-   Show the filenames associated with the retrieved chunks.
+-   Re-index the local repository from the Streamlit interface or
+    command line.
+
+### Engineering and testing
+
+-   Automated tests for the existing GitHub agent and RAG pipeline.
+-   A small retrieval-evaluation script that checks whether expected
+    files appear in the top retrieved results.
+-   Environment-variable configuration for API credentials.
+-   A compatibility fix for MCP schema annotations that are not accepted
+    by Gemini's schema validation.
+
+Feature availability depends on the configured model, credentials,
+network access, and tools exposed by the GitHub MCP server. Generated
+answers can still be incorrect and should be checked against their
+evidence.
+
+------------------------------------------------------------------------
 
 ## Architecture
 
-The application follows this workflow:
+### 1. GitHub Agent mode
 
-1. **User query:** The user submits a natural-language question through Streamlit.
-2. **Agent initialization:** The application configures the Gemini model and GitHub MCP connection.
-3. **Tool discovery:** Haystack's `SearchableToolset` helps identify relevant tools dynamically.
-4. **Information retrieval:** The agent invokes the available GitHub tools to retrieve relevant information.
-5. **Response generation:** Gemini generates a response based on the retrieved results and the system instructions.
-6. **Response display:** Streamlit displays the answer in the chat interface.
-
-### Architecture diagram
-
-```text
-User
- |
- v
-Streamlit Chat Interface
- |
- v
-Haystack Agent
- |
- +--------------------------+
- |                          |
- v                          v
-SearchableToolset       Gemini Model
- |
- v
-GitHub MCP Server
- |
- v
-GitHub Repository Data
- |
- +----------> Agent Response
-                  |
-                  v
-           Streamlit UI
+``` text
+User question
+     |
+     v
+Streamlit interface (app.py)
+     |
+     v
+Haystack Agent (agent.py) <------> Gemini
+     |
+     v
+SearchableToolset / MCPToolset
+     |
+     v
+GitHub MCP server
+     |
+     v
+Available GitHub tools and repository information
+     |
+     v
+Answer displayed in Streamlit
 ```
 
-## Tech Stack
+### 2. Repository RAG mode
 
-| Technology | Purpose |
-|---|---|
-| Python | Application logic |
-| Haystack | Agent orchestration and tool discovery |
-| Google Gemini | Language generation and tool-calling capabilities |
-| GitHub MCP Server | Access to available GitHub tools |
-| Streamlit | Interactive chat interface |
-| pytest | Automated testing |
+``` text
+Local project files
+       |
+       v
+Document loading and filtering
+       |
+       v
+Text chunking with overlap
+       |
+       v
+Gemini embeddings
+       |
+       v
+Persistent ChromaDB collection
+       |
+User question --> Query embedding
+                       |
+                       v
+                Similarity retrieval
+                       |
+                       v
+             Retrieved text + sources
+                       |
+                       v
+                  Gemini answer
+                       |
+                       v
+              Streamlit answer + sources
+```
 
-**Configured model:** `gemini-3.5-flash-lite`
+The two modes serve different purposes: GitHub Agent calls remote GitHub
+MCP tools, while Repository RAG answers questions using the locally
+indexed project files.
 
-The configured model and dependencies are defined in the project code and configuration files.
+------------------------------------------------------------------------
+
+## Technology Stack
+
+  -----------------------------------------------------------------------
+  Technology                          Purpose
+  ----------------------------------- -----------------------------------
+  Python                              Application and pipeline logic
+
+  Streamlit                           Interactive web interface
+
+  Haystack                            Agent orchestration and tool
+                                      discovery
+
+  GitHub MCP server                   Access to the GitHub tools
+                                      available to the agent
+
+  Google Gemini                       Answer generation and tool-calling
+                                      support
+
+  `gemini-embedding-001`              Text and query embeddings for RAG
+
+  ChromaDB                            Persistent vector storage and
+                                      similarity retrieval
+
+  pytest                              Automated tests
+
+  uv                                  Python dependency and environment
+                                      management
+  -----------------------------------------------------------------------
+
+The RAG pipeline currently configures `gemini-2.5-flash` for answer
+generation. The GitHub Agent may use a separately configured model in
+`agent.py`. Check the code before changing model names.
+
+------------------------------------------------------------------------
 
 ## Project Structure
 
-```text
-github_intelligence_agent/
+``` text
+RepoLensAI/
 ├── agent.py
 ├── app.py
+├── rag_pipeline.py
+├── evaluate_rag.py
+├── test_rag.py
 ├── tests/
 │   └── test_agent.py
 ├── .env.example
@@ -91,187 +184,245 @@ github_intelligence_agent/
 └── README.md
 ```
 
-Additional files or assets may exist in the local repository.
+Local runtime files, such as `.env` and `.chroma_db/`, may also exist
+but should not be committed.
 
-| File | Responsibility |
-|---|---|
-| `agent.py` | Configures the model, GitHub MCP connection, tool discovery, and agent instructions |
-| `app.py` | Provides the Streamlit user interface |
-| `tests/test_agent.py` | Contains automated tests |
-| `.env.example` | Template for environment configuration |
-| `.gitignore` | Excludes credentials and generated files from Git |
-| `pyproject.toml` | Defines project metadata and dependencies |
-| `uv.lock` | Records locked dependency versions |
+  -----------------------------------------------------------------------
+  File                                Responsibility
+  ----------------------------------- -----------------------------------
+  `agent.py`                          Configures the Haystack agent,
+                                      Gemini, GitHub MCP connection, tool
+                                      discovery, and agent instructions
 
-## Getting Started
+  `app.py`                            Streamlit UI, mode selection,
+                                      credential inputs, and chat flow
+
+  `rag_pipeline.py`                   Loads files, chunks text, embeds
+                                      content, indexes and retrieves
+                                      chunks, and generates RAG answers
+
+  `test_rag.py`                       Tests RAG indexing, retrieval, and
+                                      answer generation
+
+  `evaluate_rag.py`                   Checks retrieval against a small
+                                      set of expected source files
+
+  `tests/test_agent.py`               Tests the GitHub Agent's
+                                      configuration and behavior
+
+  `.env.example`                      Template for environment variables
+
+  `.gitignore`                        Excludes credentials and generated
+                                      files from version control
+
+  `pyproject.toml`                    Project metadata and dependency
+                                      declarations
+
+  `uv.lock`                           Locked dependency versions
+  -----------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## Setup
 
 ### Prerequisites
 
-- Python compatible with the versions supported by the project dependencies
-- Git
-- A Google Gemini API key
-- A GitHub Personal Access Token with the minimum permissions required by the configured GitHub MCP connection
+-   Python 3.11 or a compatible version allowed by `pyproject.toml`
+-   Git
+-   A Google Gemini API key
+-   A GitHub Personal Access Token for GitHub Agent mode
+-   Internet access for Gemini and GitHub MCP requests
 
-### 1. Obtain API credentials
+Repository RAG requires a Gemini API key. GitHub Agent mode also
+requires a GitHub token according to the current application
+configuration. Use the minimum GitHub permissions needed; do not grant
+write access unless it is genuinely required.
 
-**Google Gemini API key**
+### 1. Open the project directory
 
-Create an API key through [Google AI Studio](https://aistudio.google.com/).
+Open PowerShell in the directory containing `pyproject.toml`.
 
-**GitHub Personal Access Token**
+### 2. Install uv and project dependencies
 
-Create a token through [GitHub Developer Settings](https://github.com/settings/personal-access-tokens).
+If `uv` is not installed:
 
-Use the minimum permissions required for your intended repository access. Public-repository research should not require granting unnecessary write permissions.
-
-Never share your keys or commit them to the repository.
-
-### 2. Open the project directory
-
-Open a terminal in the directory containing `pyproject.toml`.
-
-### 3. Create and activate a virtual environment
-
-Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+``` powershell
+python -m pip install uv
 ```
 
-### 4. Install dependencies
+Install the project dependencies from the project configuration and
+lockfile:
 
-Install the project and its declared dependencies:
-
-```powershell
-python -m pip install -e .
+``` powershell
+python -m uv sync
 ```
 
-Install pytest if it is not already available:
+### 3. Configure credentials
 
-```powershell
-python -m pip install pytest
-```
+Create a local `.env` file from the example:
 
-### 5. Configure environment variables
-
-Create a local environment file from the example:
-
-```powershell
+``` powershell
 Copy-Item .env.example .env
 ```
 
-Add your credentials using the variable names expected by the application:
+Edit `.env` and provide the variable names used by the application:
 
-```dotenv
+``` dotenv
 GEMINI_API_KEY=your_gemini_api_key
 GITHUB_PAT=your_github_personal_access_token
 ```
 
-Keep `.env` private. Verify that the application reads these variables as expected before running it.
+Use real credentials only in your local `.env` file. Keep placeholder
+values in `.env.example`. Never commit or share `.env`, API keys, or
+access tokens. The Streamlit sidebar may also allow credentials to be
+entered at runtime.
 
-The Streamlit interface may also allow credentials to be entered through the sidebar, depending on the current implementation.
+### 4. Launch the application
 
-### 6. Run the application
-
-```powershell
-python -m streamlit run app.py
+``` powershell
+python -m uv run streamlit run app.py
 ```
 
-Open the local URL printed in the terminal. The default Streamlit address is:
+Open the local address printed by Streamlit, usually
+`http://localhost:8501`.
 
-[http://localhost:8501](http://localhost:8501)
+------------------------------------------------------------------------
 
-## Example Queries
+## Using the Application
 
-Try asking questions such as:
+### GitHub Agent
 
-- `Get the description, stars, and last updated date for microsoft/autogen.`
-- `Compare microsoft/autogen and langchain-ai/langgraph.`
-- `Summarize the main features described in the README of a repository.`
-- `Retrieve the available metadata for a GitHub repository.`
-- `Search for a repository and explain which requested fields could not be retrieved.`
+1.  Select **GitHub Agent** in the sidebar.
+2.  Provide the required Gemini API key and GitHub token.
+3.  Ask a question that names the target repository when needed. For
+    example:
+    -   `Summarize the main features of https://github.com/microsoft/autogen`
+    -   `Compare microsoft/autogen and langchain-ai/langgraph`
+    -   `What repository metadata is available for microsoft/autogen?`
 
-Actual answers depend on tool availability, repository access, current GitHub data, and model behavior.
+Answers depend on the GitHub MCP tools available to the agent and the
+information those tools return.
 
-## Evidence and Response Reliability
+### Repository RAG
 
-The system instructions include safeguards intended to reduce unsupported claims:
+1.  Select **Repository RAG** in the sidebar.
+2.  Ensure the Gemini API key is available.
+3.  Use **Re-index repository** after making relevant changes to local
+    source files.
+4.  Ask a question about the local project's implementation. For
+    example:
+    -   `How does this project connect to the GitHub MCP server?`
+    -   `How are RAG documents indexed and stored?`
+    -   `Which file implements the GitHub agent?`
 
-- Retrieve repository metadata and README content as distinct evidence sources.
-- Use the canonical GitHub `html_url` when it is returned by the metadata tool.
-- Use `Not retrieved` when a requested field is unavailable.
-- Avoid inventing missing repository details.
-- When a search returns `total_count: 0`, explain that no matching repository was found by the search tool rather than claiming this definitively proves that the repository does not exist.
+The RAG pipeline searches the local repository files it indexes. If a
+file is changed or added, re-index so the vector store reflects the
+current contents.
 
-These are intended safeguards, not a guarantee that every generated response is factually correct. Their effectiveness should be measured through controlled evaluation.
+------------------------------------------------------------------------
 
-## Testing
+## RAG Implementation Details
 
-Run the automated test suite from the project directory:
+The RAG pipeline is implemented in `rag_pipeline.py`.
 
-```powershell
-python -m pytest -q
+1.  **Loading:** Reads supported local file types, including `.md`,
+    `.txt`, `.py`, `.toml`, `.yaml`, `.yml`, and `.json`, while
+    excluding configured directories and sensitive environment files.
+2.  **Chunking:** Splits documents into overlapping chunks to preserve
+    context across boundaries.
+3.  **Embedding:** Uses `gemini-embedding-001` to convert chunks and
+    questions into vectors.
+4.  **Indexing:** Stores vectors, text, and source metadata in the
+    persistent `repolens_docs` ChromaDB collection.
+5.  **Retrieval:** Finds chunks similar to the question using vector
+    similarity.
+6.  **Generation:** Sends retrieved evidence and the question to Gemini
+    to generate a response.
+7.  **Sources:** Returns source filenames associated with retrieved
+    chunks for display in Streamlit.
+
+The vector database is local runtime data and can be rebuilt by
+re-indexing. Do not commit the `.chroma_db/` directory.
+
+------------------------------------------------------------------------
+
+## Tests and Retrieval Evaluation
+
+### Run RAG tests
+
+``` powershell
+python -m uv run python -m pytest test_rag.py -v
 ```
 
-The existing tests cover areas including:
+### Run the full test suite
 
-- Model and GitHub MCP configuration.
-- System-prompt requirements.
-- Recursive removal of MCP schema annotations.
-- Agent component construction.
-- Passing system instructions and streaming callbacks.
-- Rules for canonical URLs, missing metadata, and zero-result searches.
+``` powershell
+python -m uv run python -m pytest -q
+```
 
-Tests that mock components validate the behavior of those components under controlled conditions. They do not, by themselves, prove that live GitHub and Gemini integrations always work correctly.
+### Run retrieval evaluation
 
-## Evaluation and Metrics
+``` powershell
+python -m uv run python evaluate_rag.py
+```
 
-The project can be evaluated using a reproducible set of predefined repository queries and expected outcomes.
+`evaluate_rag.py` uses four predefined questions and checks whether each
+expected source file appears among the top four retrieved results.
 
-Useful metrics include:
+**Initial observed result: 4/4 queries passed (100% hit rate) on this
+four-query evaluation set.** This is a small diagnostic benchmark, not a
+claim of 100% overall accuracy, answer correctness, or production
+reliability. The tests and evaluator may call Gemini and consume API
+quota.
 
-| Metric | Calculation |
-|---|---|
-| Task success rate | Tasks meeting all predefined requirements divided by total tasks |
-| Evidence correctness | Evaluated factual claims supported by retrieved evidence divided by all factual claims evaluated |
-| Missing-data handling | Missing-data cases handled correctly divided by missing-data cases tested |
-| Canonical URL correctness | Correct canonical URLs returned divided by URL cases evaluated |
-| Offline test pass rate | Passed automated tests divided by total tests executed |
-| Response latency | Elapsed time between query submission and completed response |
+For a stronger evaluation, expand the dataset with varied questions,
+expected relevant files, unanswerable questions, and difficult cases.
+Measure retrieval separately from generated-answer factuality, and keep
+live API tests distinct from mocked unit tests.
 
-No performance or accuracy percentage is claimed in this README because reliable results must first be collected using a documented evaluation procedure.
+------------------------------------------------------------------------
 
-For meaningful comparisons, use the same evaluation cases and expected outcomes across implementations, record the number of runs, and distinguish mocked tests from live API evaluations.
+## Security and Limitations
 
-## Security Considerations
+-   Keep `.env`, API keys, and personal access tokens out of Git.
+-   Keep `.env.example` restricted to placeholders.
+-   Use minimum necessary GitHub token permissions.
+-   Do not commit `.chroma_db/`, virtual environments, caches, or
+    generated build artifacts.
+-   Treat retrieved repository content as untrusted input.
+-   Retrieval can return irrelevant or incomplete chunks; displaying a
+    source filename does not guarantee every answer claim is supported
+    by that file.
+-   Gemini may generate incorrect or unsupported statements even when
+    relevant evidence is retrieved.
+-   GitHub MCP tool availability, authentication, rate limits, network
+    connectivity, and model behavior can affect results.
+-   The current four-question retrieval evaluation is too small to
+    establish broad reliability.
 
-- Never commit `.env` or expose API credentials in source code.
-- Keep `.env.example` limited to placeholder values.
-- Use the minimum GitHub permissions necessary.
-- Avoid logging access tokens or sensitive request information.
-- Review error messages before sharing logs publicly.
-- Do not assume that retrieved repository content is safe or trustworthy merely because it comes from GitHub.
-
-## Limitations
-
-- Results depend on the availability and correctness of GitHub MCP tools.
-- Repository metadata can change over time.
-- Search results may be incomplete; zero matches do not establish that a repository definitively does not exist.
-- Some requested fields may be unavailable and must be reported as such.
-- LLM-generated responses can still contain unsupported or incorrect claims.
-- API availability, authentication, rate limits, network failures, and model errors can affect results.
-- Live integration reliability and response quality require separate evaluation.
+------------------------------------------------------------------------
 
 ## Future Improvements
 
-- Build a standardized evaluation dataset covering repository lookup, comparison, and missing-data scenarios.
-- Measure factual correctness and task completion against predefined expected outcomes.
-- Add regression tests for malformed tool responses and external-service failures.
-- Improve latency and tool-call observability.
-- Add structured response exports and saved research reports.
-- Add clearer error handling for authentication, rate limits, and service outages.
+-   Expand the retrieval evaluation dataset and report more informative
+    metrics such as Recall@k and MRR.
+-   Evaluate answer faithfulness and whether citations support
+    individual claims.
+-   Display source snippets and line-level references where available.
+-   Add tests for empty retrieval results, malformed responses, and
+    external-service failures.
+-   Improve error handling for authentication, rate limits, and API
+    outages.
+-   Add a clear index-refresh strategy for larger repositories.
+-   Add support for selecting a local repository directory or indexing a
+    remote repository intentionally.
+-   Improve observability for retrieval latency, model latency, and
+    token/API usage.
+
+------------------------------------------------------------------------
 
 ## License
 
-Add the appropriate license information if and when a license is selected for this repository.
+Add a license before distributing the project if you intend to publish
+it for reuse. Until a license is selected and included, do not imply
+that the project has a particular open-source license.
