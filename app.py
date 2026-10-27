@@ -435,7 +435,7 @@ if prompt:
         tools_used = []
 
         try:
-            if assistant_mode == "Repository RAG":
+if assistant_mode == "Repository RAG":
     if collection.count() == 0:
         with st.spinner("Indexing repository files..."):
             index_repository()
