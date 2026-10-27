@@ -268,8 +268,6 @@ with st.sidebar:
         "GitHub Personal Access Token",
         type="password",
         value=os.getenv("GITHUB_PAT", ""),
-        placeholder="ghp_...",
-        help="GitHub → Settings → Developer Settings → Personal Access Tokens. Read-only is enough.",
     )
 
     # Connection status badge
