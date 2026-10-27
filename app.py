@@ -17,6 +17,7 @@ import streamlit as st
 from haystack.dataclasses import ChatMessage
 
 from agent import build_agent
+from rag_pipeline import answer_question, index_repository, collection
 
 # ── Page Config ────────────────────────────────────────────────────────────────
 
@@ -249,19 +250,44 @@ if "pending_query" not in st.session_state:
 
 with st.sidebar:
     st.markdown("### 🐙 GitHub Intelligence Agent")
-    st.markdown('<p style="color:#8b949e;font-size:13px;margin-top:-8px;">Powered by Gemini 3 Flash + GitHub MCP</p>', unsafe_allow_html=True)
+    st.markdown(
+        '<p style="color:#8b949e;font-size:13px;margin-top:-8px;">'
+        'Powered by Gemini + GitHub MCP</p>',
+        unsafe_allow_html=True,
+    )
 
     st.divider()
 
-    # Credentials
+    # Assistant Mode
+    st.markdown("### Assistant Mode")
+
+    assistant_mode = st.radio(
+        "Choose how to answer",
+        ["GitHub Agent", "Repository RAG"],
+        help=(
+            "GitHub Agent researches GitHub using MCP tools. "
+            "Repository RAG answers questions using indexed local project files."
+        ),
+    )
+
+    if assistant_mode == "Repository RAG":
+        st.caption(f"Indexed chunks: {collection.count()}")
+
+        if st.button("Re-index repository", use_container_width=True):
+            try:
+                with st.spinner("Indexing repository files..."):
+                    index_repository()
+                st.success(f"Index updated: {collection.count()} chunks")
+            except Exception as exc:
+                st.error(f"Indexing failed: {exc}")
+
+    st.divider()
     st.markdown("**Configuration**")
 
     gemini_api_key = st.text_input(
         "Gemini API Key",
         type="password",
         value=os.getenv("GEMINI_API_KEY", ""),
-        placeholder="AIza...",
-        help="Get yours free at https://aistudio.google.com",
     )
 
     github_pat = st.text_input(
@@ -270,6 +296,8 @@ with st.sidebar:
         value=os.getenv("GITHUB_PAT", ""),
     )
 
+# Sidebar status and controls
+with st.sidebar:
     # Connection status badge
     has_gemini = bool(gemini_api_key)
     has_pat = bool(github_pat)
@@ -364,13 +392,28 @@ if st.session_state.pending_query:
     prompt = st.session_state.pending_query
     st.session_state.pending_query = None
 else:
-    prompt = st.chat_input("Ask anything about GitHub...")
+    placeholder_text = (
+    "Ask about your local repository..."
+    if assistant_mode == "Repository RAG"
+    else "Ask anything about GitHub..."
+)
+
+prompt = st.chat_input(placeholder_text)
 
 # ── Run Agent ──────────────────────────────────────────────────────────────────
 
 if prompt:
-    if not gemini_api_key or not github_pat:
-        st.error("Enter your Gemini API Key and GitHub PAT in the sidebar to get started.")
+    if assistant_mode == "GitHub Agent" and (
+        not gemini_api_key or not github_pat
+    ):
+        st.error(
+            "Enter your Gemini API Key and GitHub PAT "
+            "in the sidebar to use GitHub Agent."
+        )
+        st.stop()
+
+    if assistant_mode == "Repository RAG" and not gemini_api_key:
+        st.error("Enter your Gemini API Key in the sidebar.")
         st.stop()
 
     # Strip emoji prefix from quick query buttons
@@ -382,68 +425,113 @@ if prompt:
         st.markdown(clean_prompt)
 
     # Run agent
+    # Run selected assistant
     with st.chat_message("assistant"):
         placeholder = st.empty()
-        full_response = {"text": ""}
         start_time = time.time()
-
-        def streaming_callback(chunk):
-            if chunk.content:
-                full_response["text"] += chunk.content
-                placeholder.markdown(full_response["text"] + "▌")
+        tools_used = []
 
         try:
-            with st.spinner("Researching GitHub..."):
-                agent = build_agent(github_pat, gemini_api_key, streaming_callback)
-                result = agent.run([ChatMessage.from_user(clean_prompt)])
+            if assistant_mode == "Repository RAG":
+                with st.spinner("Retrieving repository evidence..."):
+                    rag_result = answer_question(clean_prompt)
 
-            elapsed = time.time() - start_time
+                final_text = rag_result["answer"]
 
-            # Finalise response text
-            if not full_response["text"]:
-                for msg in reversed(result.get("messages", [])):
-                    if hasattr(msg, "text") and msg.text:
-                        full_response["text"] = msg.text
-                        break
-                    if hasattr(msg, "content") and msg.content:
-                        full_response["text"] = msg.content
-                        break
+                 # Display the answer first
+                placeholder.markdown(final_text)
 
-            final_text = full_response["text"] or "_No response received. Try rephrasing your query._"
-            placeholder.markdown(final_text)
+                  # Display sources separately
+                if rag_result["sources"]:
+                    with st.expander("📚 Sources used", expanded=True):
+                        for source in dict.fromkeys(rag_result["sources"]):
+                            st.markdown(f"- `{source}`")
 
-            # Extract tools used from result messages
-            tools_used = []
-            for msg in result.get("messages", []):
-                if hasattr(msg, "tool_calls") and msg.tool_calls:
-                    for tc in msg.tool_calls:
-                        name = getattr(tc, "tool_name", None)
-                        if name and name not in tools_used:
-                            tools_used.append(name)
+                elapsed = time.time() - start_time
+                placeholder.markdown(final_text)
 
-            # Tool badges
-            if tools_used:
-                badges = "".join([f'<span class="tool-badge">⚙ {t}</span>' for t in tools_used])
-                st.markdown(f'<div class="tool-badges">{badges}</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="response-meta">⏱ {elapsed:.1f}s · '
+                    f'Repository RAG</div>',
+                    unsafe_allow_html=True,
+                )
 
-            # Response metadata
-            tool_count = len(tools_used)
-            st.markdown(
-                f'<div class="response-meta">⏱ {elapsed:.1f}s &nbsp;·&nbsp; '
-                f'⚙ {tool_count} tool{"s" if tool_count != 1 else ""} called</div>',
-                unsafe_allow_html=True,
-            )
+            else:
+                full_response = {"text": ""}
 
-            # Update session stats
+                def streaming_callback(chunk):
+                    if chunk.content:
+                        full_response["text"] += chunk.content
+                        placeholder.markdown(
+                            full_response["text"] + "▌"
+                        )
+
+                with st.spinner("Researching GitHub..."):
+                    agent = build_agent(
+                        github_pat,
+                        gemini_api_key,
+                        streaming_callback,
+                    )
+                    result = agent.run(
+                        [ChatMessage.from_user(clean_prompt)]
+                    )
+
+                elapsed = time.time() - start_time
+
+                if not full_response["text"]:
+                    for msg in reversed(result.get("messages", [])):
+                        if hasattr(msg, "text") and msg.text:
+                            full_response["text"] = msg.text
+                            break
+                        if hasattr(msg, "content") and msg.content:
+                            full_response["text"] = str(msg.content)
+                            break
+
+                final_text = (
+                    full_response["text"]
+                    or "_No response received. Try rephrasing your query._"
+                )
+                placeholder.markdown(final_text)
+
+                for msg in result.get("messages", []):
+                    if hasattr(msg, "tool_calls") and msg.tool_calls:
+                        for tc in msg.tool_calls:
+                            name = getattr(tc, "tool_name", None)
+                            if name and name not in tools_used:
+                                tools_used.append(name)
+
+                if tools_used:
+                    badges = "".join(
+                        f'<span class="tool-badge">⚙ {tool}</span>'
+                        for tool in tools_used
+                    )
+                    st.markdown(
+                        f'<div class="tool-badges">{badges}</div>',
+                        unsafe_allow_html=True,
+                    )
+
+                st.markdown(
+                    f'<div class="response-meta">⏱ {elapsed:.1f}s · '
+                    f'⚙ {len(tools_used)} tools called</div>',
+                    unsafe_allow_html=True,
+                )
+
             st.session_state.total_queries += 1
-            st.session_state.total_tools_used += tool_count
+            st.session_state.total_tools_used += len(tools_used)
 
-            # Save to history
             st.session_state.messages.append({
                 "role": "assistant",
                 "content": final_text,
                 "tools": tools_used,
                 "response_time": elapsed,
+            })
+
+        except Exception as exc:
+            error_msg = f"**Error:** {exc}"
+            placeholder.error(error_msg)
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": error_msg,
             })
 
         except Exception as exc:

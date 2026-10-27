@@ -1,6 +1,7 @@
 ﻿.env
 .env.*
 !.env.example
+.chroma_db/
 
 .venv/
 venv/
@@ -8,6 +9,7 @@ __pycache__/
 .pytest_cache/
 *.py[cod]
 
+build/
 *.egg-info/
 agent.py.backup
 
