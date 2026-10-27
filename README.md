@@ -422,7 +422,4 @@ live API tests distinct from mocked unit tests.
 ------------------------------------------------------------------------
 
 ## License
-
-Add a license before distributing the project if you intend to publish
-it for reuse. Until a license is selected and included, do not imply
-that the project has a particular open-source license.
+MIT
