@@ -103,7 +103,8 @@ def embed_texts(texts):
 
         embeddings.append(response.embeddings[0].values)
 
-    return embeddings```python
+    return embeddings
+    
 def embed_texts(texts):
     """Create Gemini embeddings in small batches."""
     client = get_gemini_client()
