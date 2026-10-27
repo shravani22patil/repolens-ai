@@ -290,6 +290,9 @@ with st.sidebar:
         value=os.getenv("GEMINI_API_KEY", ""),
     )
 
+    if gemini_api_key:
+    os.environ["GEMINI_API_KEY"] = gemini_api_key
+    
     github_pat = st.text_input(
         "GitHub Personal Access Token",
         type="password",
