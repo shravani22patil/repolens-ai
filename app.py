@@ -436,12 +436,11 @@ if prompt:
 
         try:
             if assistant_mode == "Repository RAG":
-                with st.spinner("Retrieving repository evidence..."):
-                    if collection.count() == 0:
-                       with st.spinner("Indexing repository files..."):
-                         index_repository()
+    if collection.count() == 0:
+        with st.spinner("Indexing repository files..."):
+            index_repository()
 
-                    result = answer_question(prompt)
+    result = answer_question(prompt)
 
                 final_text = rag_result["answer"]
 
