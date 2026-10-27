@@ -246,10 +246,12 @@ Question: {question}
 Answer:
 """
 
-    response = client.models.generate_content(
-        model=GENERATION_MODEL,
-        contents=prompt,
-    )
+client = get_gemini_client()
+
+response = client.models.generate_content(
+    model=GENERATION_MODEL,
+    contents=prompt,
+)
 
     return {
         "answer": response.text or "No answer was generated.",
